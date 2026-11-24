@@ -244,7 +244,7 @@ export default function ProModal({ onClose, onUnlock }: Props) {
             <label className="field-label" htmlFor="upi-utr">UPI transaction reference / UTR</label>
             <input id="upi-utr" className="field" autoComplete="off" required minLength={6} maxLength={35} pattern="[A-Za-z0-9\x2f\-]{6,35}" value={utr} onChange={(event) => setUtr(event.target.value)} placeholder="Enter the reference from your UPI app" />
             <button type="submit" className="btn btn-primary full-width" disabled={submitting}>{submitting ? "Submitting…" : "Submit for manual review"}</button>
-            <p className="checkout-note">Your name, email, and UTR are stored in the configured Upstash review store for up to 90 days. We never receive your UPI PIN or bank credentials.</p>
+            <p className="checkout-note">Your name, email, and UTR are stored securely in Supabase for up to 90 days. We never receive your UPI PIN or bank credentials.</p>
             {paymentMessage && <p className="payment-message" role="status">{paymentMessage}</p>}
           </form>
         </> : <div className="payment-pending">
