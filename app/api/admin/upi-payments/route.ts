@@ -1,26 +1,40 @@
-import { isValidAdminToken, listPayments, updatePaymentStatus } from "@/lib/upi-payments";
+import {
+  getPaymentSummary,
+  isAdminLoginConfigured,
+  isValidAdminSession,
+  listPayments,
+  updatePaymentStatus
+} from "@/lib/upi-payments";
 
 export const runtime = "nodejs";
 
 function unauthorized() {
-  const configured = Boolean(process.env.PRO_ADMIN_TOKEN);
+  const configured = isAdminLoginConfigured();
   return Response.json(
-    { error: configured ? "Admin authorization failed." : "Admin access is not configured." },
+    { error: configured ? "Please sign in to review payments." : "Admin login is not configured." },
     { status: configured ? 401 : 503, headers: { "Cache-Control": "no-store" } }
   );
 }
 
 export async function GET(request: Request) {
-  if (!isValidAdminToken(request)) return unauthorized();
+  if (!isValidAdminSession(request)) return unauthorized();
   try {
-    return Response.json({ payments: await listPayments() }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return Response.json({ error: "Payment storage is temporarily unavailable." }, { status: 503 });
+    const payments = await listPayments();
+    try {
+      const summary = await getPaymentSummary();
+      return Response.json({ payments, summary }, { headers: { "Cache-Control": "no-store" } });
+    } catch (cause) {
+      const summaryError = cause instanceof Error ? cause.message : "Payment summary is temporarily unavailable.";
+      return Response.json({ payments, summary: null, summaryError }, { headers: { "Cache-Control": "no-store" } });
+    }
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Payment storage is temporarily unavailable.";
+    return Response.json({ error: message }, { status: 503 });
   }
 }
 
 export async function PATCH(request: Request) {
-  if (!isValidAdminToken(request)) return unauthorized();
+  if (!isValidAdminSession(request)) return unauthorized();
   let body: unknown;
   try {
     body = await request.json();
@@ -37,7 +51,8 @@ export async function PATCH(request: Request) {
     const payment = await updatePaymentStatus(reference, status);
     if (!payment) return Response.json({ error: "Payment request was not found." }, { status: 404 });
     return Response.json({ status: payment.status }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return Response.json({ error: "Payment review could not be saved." }, { status: 503 });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Payment review could not be saved.";
+    return Response.json({ error: message }, { status: 503 });
   }
 }
