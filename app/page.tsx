@@ -50,10 +50,10 @@ const features = [
 
 const faqs = [
   ["Are these QR codes static?", "Yes. The QR code encodes your content directly. It does not depend on a QRcraft server or an account to keep working."],
-  ["Is my information private?", "QR generation, logo processing, design files, and exports happen locally in your browser. If you buy Pro, your name, email, and UPI transaction reference are stored securely in Supabase for up to 90 days; QR content and uploaded logos are never sent."],
+  ["Is my information private?", "QR generation, logo processing, design files, and exports happen locally in your browser. If you buy Pro, your name, email, and UPI transaction reference are stored securely in Supabase for up to 90 days. A keyed email fingerprint and license code are retained to validate your reusable Pro license; QR content and uploaded logos are never sent."],
   ["Can I use a QR code for Wi-Fi?", "Yes. Choose Wi-Fi, enter the network name and password, and scan with a compatible phone camera to join."],
   ["Why does my logo increase error correction?", "A logo covers part of the code. We automatically use the strongest QR correction level to help phones recover the underlying data."],
-  ["How do Pro unlocks work?", "Pay ₹9 using the UPI QR, submit your UTR, and wait for the QRcraft owner to match it in the bank app. After approval, your browser receives and validates a signed Pro license. UPI payment itself is reviewed manually."],
+  ["How do Pro unlocks work?", "Pay ₹9 using the UPI QR, submit your UTR and email, and wait for the QRcraft owner to match it in the bank app. After approval, your email receives one unique signed Pro license that can be reused on your other browsers. UPI payment itself is reviewed manually."],
   ["Can I use the QR codes commercially?", "Free codes include a prominent QRcraft watermark. Pro is intended to include a commercial-use license; connect your live checkout and license terms before offering it."]
 ];
 
@@ -257,7 +257,7 @@ export default function Home() {
           <div className="section-heading"><span className="eyebrow">CLEAR, SIMPLE PRICING</span><h2>Start free. Go Pro when you’re ready.</h2><p>Make your first QR code for free. Upgrade for more ways to make it yours.</p></div>
           <div className="pricing-grid">
             <article className="price-card"><h3>Free</h3><p className="price">₹0 <small>forever</small></p><p className="price-desc">Everything you need to create and share.</p><ul className="price-list">{["Unlimited QR designs", "All QR content types", "Custom colors and styles", "Watermarked PNG downloads", "Local design save & restore"].map((item) => <li key={item}><Check size={14} />{item}</li>)}</ul><a href="#studio" className="btn btn-outline full-width">Start creating <ArrowRight size={14} /></a></article>
-            <article className="price-card pro"><span className="popular">ONE-TIME UNLOCK</span><h3>QRcraft Pro</h3><p className="price">₹9 <small>one-time</small></p><p className="price-desc">All Pro tools unlocked on this device.</p><ul className="price-list">{["Watermark-free PNG + SVG", "High-resolution PNG up to 2048px", "Logo uploads & premium templates", "Commercial-use license", "Browser-based CSV batch generation"].map((item) => <li key={item}><Check size={14} />{item}</li>)}</ul>{isPro ? <div className="pricing-unlocked"><Check size={15} /> Pro unlocked in this browser</div> : <button className="btn btn-primary full-width" onClick={() => setProOpen(true)}><Sparkles size={14} /> Unlock Pro · ₹9</button>}</article>
+            <article className="price-card pro"><span className="popular">ONE-TIME UNLOCK</span><h3>QRcraft Pro</h3><p className="price">₹9 <small>one-time</small></p><p className="price-desc">One reusable Pro license per email.</p><ul className="price-list">{["Watermark-free PNG + SVG", "High-resolution PNG up to 2048px", "Logo uploads & premium templates", "Commercial-use license", "Browser-based CSV batch generation"].map((item) => <li key={item}><Check size={14} />{item}</li>)}</ul>{isPro ? <div className="pricing-unlocked"><Check size={15} /> Pro unlocked in this browser</div> : <button className="btn btn-primary full-width" onClick={() => setProOpen(true)}><Sparkles size={14} /> Unlock Pro · ₹9</button>}</article>
           </div>
           <p className="pricing-disclaimer">₹9 one-time via UPI. Payment is manually verified before a signed Pro code is issued. QR designs stay in your browser.</p>
         </div>
@@ -271,7 +271,7 @@ export default function Home() {
       <footer className="footer">
         <div className="footer-inner">
           <div><Logo /><p>Thoughtful QR codes, made simple.</p></div>
-          <div className="footer-note"><ShieldCheck size={15} /> QR content and images stay local; Pro UTRs are sent for manual payment review.</div>
+          <div className="footer-note"><ShieldCheck size={15} /> QR content and images stay local; Pro order details go to Supabase, with a keyed email fingerprint retained to validate your license.</div>
           <span className="footer-copy">© 2026 QRcraft</span>
         </div>
       </footer>
