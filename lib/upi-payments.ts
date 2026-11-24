@@ -10,6 +10,7 @@ type StoredPayment = {
   reference: string;
   name: string | null;
   email: string | null;
+  email_hash: string | null;
   utr: string | null;
   utr_hash: string | null;
   submitted_at: string;
@@ -93,7 +94,21 @@ function licenseSecret() {
   return secret;
 }
 
-function licenseFor(reference: string) {
+function emailHashFor(email: string) {
+  return createHmac("sha256", licenseSecret())
+    .update(`qrcraft-pro-email-v1|${email.trim().toLowerCase()}`)
+    .digest("hex")
+    .toUpperCase();
+}
+
+function licenseForEmailHash(emailHash: string) {
+  const signature = createHmac("sha256", licenseSecret())
+    .update(`qrcraft-pro-license-v1|${emailHash}`)
+    .digest("base64url");
+  return `QRC1.${emailHash}.${signature}`;
+}
+
+function legacyLicenseFor(reference: string) {
   const signature = createHmac("sha256", licenseSecret())
     .update(`qrcraft-pro-v1|${reference}`)
     .digest("base64url");
@@ -120,6 +135,8 @@ async function getPayment(reference: string) {
 export async function createPayment(input: { name: string; email: string; utr: string }) {
   const reference = randomBytes(6).toString("hex").toUpperCase();
   const accessKey = randomBytes(32).toString("base64url");
+  const email = input.email.trim().toLowerCase();
+  const emailHash = emailHashFor(email);
   const utrHash = createHash("sha256").update(input.utr.trim().toUpperCase()).digest("hex");
   const query = new URLSearchParams({ select: "reference,status" });
   const rows = await supabaseRequest<Pick<StoredPayment, "reference" | "status">[]>(
@@ -130,7 +147,8 @@ export async function createPayment(input: { name: string; email: string; utr: s
       body: JSON.stringify({
         reference,
         name: input.name.trim(),
-        email: input.email.trim().toLowerCase(),
+        email,
+        email_hash: emailHash,
         utr: input.utr.trim(),
         utr_hash: utrHash,
         submitted_at: new Date().toISOString(),
@@ -197,11 +215,17 @@ export async function updatePaymentStatus(reference: string, status: "approved" 
   const payment = await getPayment(reference);
   if (!payment) return null;
   if (payment.status !== "pending") return payment;
+  if (status === "approved" && !payment.email)
+    throw new Error("This payment request has expired and no longer has an email to issue a Pro license.");
 
-  const update: Pick<StoredPayment, "status" | "license_code" | "approved_at"> = {
+  const approvedEmailHash = status === "approved" && payment.email
+    ? emailHashFor(payment.email)
+    : payment.email_hash;
+  const update: Pick<StoredPayment, "status" | "license_code" | "approved_at" | "email_hash"> = {
     status,
-    license_code: status === "approved" ? licenseFor(reference) : null,
-    approved_at: status === "approved" ? new Date().toISOString() : null
+    license_code: status === "approved" && approvedEmailHash ? licenseForEmailHash(approvedEmailHash) : null,
+    approved_at: status === "approved" ? new Date().toISOString() : null,
+    email_hash: approvedEmailHash
   };
   const query = new URLSearchParams({ reference: `eq.${reference}`, status: "eq.pending", select: "*" });
   const updated = await supabaseRequest<StoredPayment[]>(`${PAYMENT_TABLE}?${query}`, {
@@ -213,11 +237,27 @@ export async function updatePaymentStatus(reference: string, status: "approved" 
 }
 
 export async function isValidLicense(code: string) {
-  const match = /^QRC1\.([A-F0-9]{12})\.([A-Za-z0-9_-]{43})$/.exec(code);
-  if (!match) return false;
-  const payment = await getPayment(match[1]);
+  const emailMatch = /^QRC1\.([A-F0-9]{64})\.([A-Za-z0-9_-]{43})$/.exec(code);
+  if (emailMatch) {
+    if (!equalText(licenseForEmailHash(emailMatch[1]), code)) return false;
+    const query = new URLSearchParams({
+      select: "reference",
+      email_hash: `eq.${emailMatch[1]}`,
+      status: "eq.approved",
+      license_code: `eq.${code}`,
+      limit: "1"
+    });
+    const approvedPayments = await supabaseRequest<Pick<StoredPayment, "reference">[]>(
+      `${PAYMENT_TABLE}?${query}`
+    );
+    return approvedPayments.length > 0;
+  }
+
+  const legacyMatch = /^QRC1\.([A-F0-9]{12})\.([A-Za-z0-9_-]{43})$/.exec(code);
+  if (!legacyMatch) return false;
+  const payment = await getPayment(legacyMatch[1]);
   if (payment?.status !== "approved" || payment.license_code !== code) return false;
-  return equalText(licenseFor(match[1]), code);
+  return equalText(legacyLicenseFor(legacyMatch[1]), code);
 }
 
 export function isAdminLoginConfigured() {
