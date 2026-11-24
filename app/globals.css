@@ -235,13 +235,32 @@ input[type=range] { accent-color: var(--brand); width: 100%; height: 4px; }
 .dark-mode .issued-license code { background: #1d1d2a; border-color: #414057; color: #cbc6ff; }
 .admin-payments { min-height: 100vh; padding: 28px max(5vw, 20px) 60px; background: #f8f8fc; }
 .admin-payments > .brand { max-width: 980px; margin: 0 auto; }
-.admin-heading, .admin-panel, .admin-list { max-width: 760px; margin-left: auto; margin-right: auto; }
+.admin-heading, .admin-panel, .admin-list, .admin-stats, .admin-toolbar, .admin-error, .admin-retention { max-width: 980px; margin-left: auto; margin-right: auto; }
 .admin-heading { margin-top: 44px; margin-bottom: 20px; }
 .admin-heading h1 { margin: 9px 0; font-size: clamp(24px, 4vw, 34px); letter-spacing: -1px; }
 .admin-heading p { max-width: 640px; color: #77778a; font-size: 13px; line-height: 1.6; }
 .admin-panel { padding: 20px; }
-.admin-token-row { display: flex; gap: 9px; }
-.admin-token-row .field { min-width: 0; }
+.admin-login { display: grid; max-width: 440px; gap: 10px; }
+.admin-login h2, .admin-login p { margin: 0; }
+.admin-login p { color: #77778a; font-size: 12px; line-height: 1.5; }
+.admin-login .field-label { margin: 4px 0 -5px; }
+.admin-toolbar, .admin-toolbar > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.admin-toolbar { margin-bottom: 14px; }
+.admin-toolbar p { display: flex; align-items: center; gap: 8px; margin: 0; color: #77778a; font-size: 11px; }
+.admin-toolbar > div { justify-content: flex-end; }
+.admin-live-dot { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #35aa72; box-shadow: 0 0 0 3px #35aa7222; }
+.admin-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.admin-stat { display: grid; gap: 5px; padding: 15px; }
+.admin-stat span, .admin-stat small { color: #77778a; font-size: 10px; }
+.admin-stat strong { color: #29283b; font-size: 23px; letter-spacing: -.5px; }
+.admin-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 160px 150px; gap: 10px; margin-top: 14px; }
+.admin-filters label { min-width: 0; }
+.admin-search { position: relative; display: flex; align-items: center; }
+.admin-search > svg { position: absolute; left: 12px; color: #858597; }
+.admin-search .field { padding-left: 36px; }
+.admin-list-heading { display: flex; max-width: 980px; align-items: center; justify-content: space-between; gap: 12px; margin: 22px auto 0; }
+.admin-list-heading h2 { margin: 0; color: #302f43; font-size: 15px; }
+.admin-list-heading span { color: #858597; font-size: 10px; text-align: right; }
 .admin-list { display: grid; gap: 12px; margin-top: 16px; }
 .admin-payment { padding: 18px; }
 .admin-payment-title { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
@@ -255,11 +274,15 @@ input[type=range] { accent-color: var(--brand); width: 100%; height: 4px; }
 .payment-details dt { color: #858597; font-size: 10px; }
 .payment-details dd { margin: 4px 0 0; overflow-wrap: anywhere; color: #29283b; font-size: 12px; font-weight: 650; }
 .admin-review-actions { display: flex; gap: 8px; }
+.admin-retention { display: flex; align-items: center; gap: 6px; margin-top: 12px; color: #858597; font-size: 10px; }
 .dark-mode .upi-payment-card, .dark-mode .payment-pending { background: #29273b; border-color: #414057; }
 .dark-mode .upi-payment-copy b, .dark-mode .payment-pending h3 { color: #eee; }
 .dark-mode .admin-payments { background: #171722; }
 .dark-mode .admin-panel, .dark-mode .admin-payment { background: #222230; border-color: #363646; color: #eee; }
 .dark-mode .admin-payment-title h2, .dark-mode .payment-details dd { color: #eee; }
+.dark-mode .admin-stat strong { color: #eee; }
+.dark-mode .admin-list-heading h2 { color: #eee; }
+.dark-mode .admin-login p, .dark-mode .admin-toolbar p, .dark-mode .admin-stat span, .dark-mode .admin-stat small, .dark-mode .admin-retention { color: #aaaabc; }
 .dark-mode .payment-details dt, .dark-mode .admin-payment-title p { color: #aaaabc; }
 .unlock-row { display: flex; gap: 8px; }
 .unlock-row .field { min-width: 0; }
@@ -298,8 +321,18 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 @media (max-width: 420px) {
   .unlock-row { flex-direction: column; }
   .payment-details { grid-template-columns: 1fr; }
-  .admin-token-row { flex-direction: column; }
+  .admin-toolbar, .admin-toolbar > div { align-items: stretch; flex-direction: column; }
+  .admin-toolbar > div .btn { width: 100%; }
+  .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-filters { grid-template-columns: 1fr; }
+  .admin-list-heading { align-items: flex-start; flex-direction: column; }
+  .admin-list-heading span { text-align: left; }
   .admin-review-actions { flex-direction: column; }
+}
+@media (min-width: 421px) and (max-width: 720px) {
+  .admin-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-filters { grid-template-columns: minmax(0, 1fr) 1fr; }
+  .admin-search { grid-column: 1 / -1; }
 }
 .dark-mode { --paper: #171722; --ink: #f1f1f7; --muted: #aaaabc; --line: #333344; --wash: #20202d; }
 .dark-mode .topbar, .dark-mode .panel, .dark-mode .template-card, .dark-mode .price-card, .dark-mode .modal { background: #222230; color: #f1f1f7; border-color: #363646; }
