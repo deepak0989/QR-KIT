@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Enter your name (2–80 characters)." }, { status: 400 });
   if (typeof email !== "string" || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
     return Response.json({ error: "Enter a valid email address." }, { status: 400 });
-  if (typeof utr !== "string" || !/^[A-Za-z0-9-]{6,35}$/.test(utr.trim()))
+  if (typeof utr !== "string" || !/^[A-Za-z0-9\x2f-]{6,35}$/.test(utr.trim()))
     return Response.json({ error: "Enter the UPI transaction reference shown in your payment app." }, { status: 400 });
 
   try {
