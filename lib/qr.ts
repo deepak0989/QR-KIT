@@ -48,7 +48,7 @@ export const initialDesign: Design = {
   cornerStyle: "extra-rounded",
   cornerDotStyle: "dot",
   size: 1024,
-  margin: 12,
+  margin: 24,
   correction: "M",
   logo: "",
   logoName: "",
@@ -73,6 +73,12 @@ export function getQrData(design: Design): { data: string; error: string } {
         const parsed = new URL(url);
         const allowed = design.type === "payment" ? ["http:", "https:", "upi:"] : ["http:", "https:"];
         if (!allowed.includes(parsed.protocol)) throw new Error();
+        if (design.type === "website") {
+          for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"]) {
+            const trackingValue = value(key);
+            if (trackingValue) parsed.searchParams.set(key, trackingValue);
+          }
+        }
         return { data: parsed.toString(), error: "" };
       } catch {
         return { data: "", error: design.type === "payment" ? "Enter a valid http, https, or UPI payment link." : "Enter a valid URL starting with https:// or http://." };

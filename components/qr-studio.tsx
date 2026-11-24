@@ -18,10 +18,15 @@ import {
   MessageSquare,
   Paintbrush,
   Phone,
+  Pencil,
   QrCode,
   RotateCcw,
   Save,
   Sparkles,
+  Smartphone,
+  Store,
+  Tag,
+  Trash2,
   Type,
   Wifi,
   X
@@ -71,6 +76,18 @@ type RecentDesign = {
 };
 
 type MobileTab = "content" | "design" | "export";
+type PreviewMode = "phone" | "table-tent" | "business-card" | "poster" | "product-label";
+type PrintPreset = "business-card" | "a4-poster" | "instagram-post" | "instagram-story" | "menu-card" | "product-label";
+type BrandKit = Pick<Design, "foreground" | "background" | "gradient" | "gradientEnd" | "gradientAngle" | "dotStyle" | "cornerStyle" | "cornerDotStyle" | "font" | "logo" | "logoName" | "logoBackground">;
+
+const printPresets: { value: PrintPreset; label: string; width: number; height: number }[] = [
+  { value: "business-card", label: "Business card · 3.5 × 2 in", width: 1050, height: 600 },
+  { value: "a4-poster", label: "A4 poster", width: 2480, height: 3508 },
+  { value: "instagram-post", label: "Instagram post", width: 1080, height: 1080 },
+  { value: "instagram-story", label: "Instagram story", width: 1080, height: 1920 },
+  { value: "menu-card", label: "Menu card", width: 900, height: 1400 },
+  { value: "product-label", label: "Product label · 2 × 2 in", width: 600, height: 600 }
+];
 
 const dotStyles = ["square", "rounded", "dots", "classy", "extra-rounded"];
 const cornerStyles = ["square", "rounded", "dots", "extra-rounded"];
@@ -280,6 +297,44 @@ async function makeSvgBlob(design: Design, data: string): Promise<Blob> {
   return new Blob([new XMLSerializer().serializeToString(svg)], { type: "image/svg+xml" });
 }
 
+async function makePrintBlob(design: Design, data: string, isPro: boolean, preset: PrintPreset) {
+  const format = printPresets.find((item) => item.value === preset) ?? printPresets[0];
+  const qrSize = Math.round(Math.min(format.width, format.height) * 0.62);
+  const qrDesign = { ...design, size: qrSize, cta: "", frame: "none" as const };
+  const qrBlob = await makePngBlob(qrDesign, data, isPro);
+  const qrImage = await createImageBitmap(qrBlob);
+  const canvas = document.createElement("canvas");
+  canvas.width = format.width;
+  canvas.height = format.height;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("Your browser could not prepare the print-ready image.");
+  context.fillStyle = design.background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  const heading = design.cta || "Scan with your camera";
+  context.fillStyle = design.ctaColor;
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.font = `700 ${Math.max(28, Math.round(Math.min(canvas.width, canvas.height) * 0.065))}px ${design.font}, Arial, sans-serif`;
+  context.fillText(heading, canvas.width / 2, canvas.height * 0.18, canvas.width * 0.84);
+  const maxQrWidth = canvas.width * 0.68;
+  const maxQrHeight = canvas.height * 0.54;
+  const scale = Math.min(maxQrWidth / qrImage.width, maxQrHeight / qrImage.height);
+  const drawWidth = qrImage.width * scale;
+  const drawHeight = qrImage.height * scale;
+  context.drawImage(qrImage, (canvas.width - drawWidth) / 2, (canvas.height - drawHeight) / 2, drawWidth, drawHeight);
+  if (!isPro) {
+    context.globalAlpha = 0.72;
+    context.fillStyle = "#696778";
+    context.font = `600 ${Math.max(13, Math.round(Math.min(canvas.width, canvas.height) * 0.022))}px Arial,sans-serif`;
+    context.textAlign = "right";
+    context.fillText("Made with QRcraft", canvas.width - 22, canvas.height - 18);
+    context.globalAlpha = 1;
+  }
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("Print-ready PNG could not be created.")), "image/png");
+  });
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -301,12 +356,24 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
   const [batching, setBatching] = useState(false);
   const [mobileTab, setMobileTab] = useState<MobileTab>("content");
   const [recent, setRecent] = useState<{ items: RecentDesign[]; ready: boolean }>({ items: [], ready: false });
+  const [brandKit, setBrandKit] = useState<BrandKit | null>(null);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("phone");
+  const [printPreset, setPrintPreset] = useState<PrintPreset>("a4-poster");
+  const [renamingId, setRenamingId] = useState("");
+  const [renameValue, setRenameValue] = useState("");
+  const [utmOpen, setUtmOpen] = useState(false);
   const { data, error } = useMemo(() => getQrData(design), [design]);
   const contrast = Math.min(
     contrastRatio(design.foreground, design.background),
     design.gradient ? contrastRatio(design.gradientEnd, design.background) : Infinity
   );
   const exportSize = isPro ? design.size : Math.min(design.size, 1024);
+  const qualityWarnings = [
+    contrast < 4.5 ? "Contrast is below 4.5:1. Choose darker foreground and lighter background colors." : "",
+    exportSize < 512 ? "Small QR size may be difficult to scan when printed. Use at least 512 px for print." : "",
+    design.margin < Math.ceil((exportSize * 4) / 177) ? "Quiet zone is below four modules; the exported QR automatically adds a scan-safe margin." : "",
+    design.logo && design.logoSize >= 30 ? `The logo covers about ${Math.round((design.logoSize * design.logoSize) / 100)}% of the QR area. Consider reducing it and test the printed code.` : ""
+  ].filter(Boolean);
 
   const update = useCallback(
     (changes: Partial<Design>) => {
@@ -335,7 +402,7 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
           typeof entry.savedAt === "number" && entry.design && typeof entry.design === "object" &&
           typeOptions.some((option) => option.value === entry.design.type) &&
           Boolean(entry.design.values) && typeof entry.design.values === "object" && !Array.isArray(entry.design.values)
-        ).slice(0, 3);
+        ).slice(0, 10);
       }
     } catch (cause) {
       onNotify(cause instanceof Error ? cause.message : "Recent designs could not be loaded from this browser.");
@@ -343,6 +410,24 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
     // Load local-only history after the server-rendered editor has mounted.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setRecent({ items, ready: true });
+  }, [onNotify]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("qrcraft-brand-kit");
+      if (!saved) return;
+      const parsed = JSON.parse(saved) as Partial<BrandKit>;
+      if (/^#[0-9a-f]{6}$/i.test(parsed.foreground ?? "") &&
+          /^#[0-9a-f]{6}$/i.test(parsed.background ?? "") &&
+          typeof parsed.dotStyle === "string" && typeof parsed.cornerStyle === "string" &&
+          typeof parsed.cornerDotStyle === "string" && typeof parsed.font === "string") {
+        // Hydrate local-only settings after the server-rendered editor mounts.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setBrandKit(parsed as BrandKit);
+      }
+    } catch (cause) {
+      onNotify(cause instanceof Error ? cause.message : "The saved Brand Kit could not be loaded.");
+    }
   }, [onNotify]);
 
   const { logo, logoBackground } = design;
@@ -456,7 +541,7 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
       savedAt: now,
       design
     };
-    const items = [item, ...recent.items].slice(0, 3);
+    const items = [item, ...recent.items].slice(0, 10);
     try {
       localStorage.setItem("qrcraft-recents", JSON.stringify(items));
       setRecent({ items, ready: true });
@@ -472,6 +557,41 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
     onNotify("Recent design restored.");
   };
 
+  const storeRecentItems = (items: RecentDesign[], message: string) => {
+    try {
+      localStorage.setItem("qrcraft-recents", JSON.stringify(items));
+      setRecent({ items, ready: true });
+      onNotify(message);
+    } catch {
+      onNotify("Recent design storage is full. Remove a large logo or clear old designs and try again.");
+    }
+  };
+
+  const saveRename = (id: string) => {
+    const title = renameValue.trim();
+    if (!title) {
+      onNotify("Enter a name for this design.");
+      return;
+    }
+    storeRecentItems(recent.items.map((item) => item.id === id ? { ...item, title } : item), "Design renamed.");
+    setRenamingId("");
+    setRenameValue("");
+  };
+
+  const duplicateRecent = (item: RecentDesign) => {
+    const duplicate = {
+      ...item,
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      title: `${item.title} (copy)`,
+      savedAt: Date.now(),
+      design: { ...item.design, values: { ...item.design.values } }
+    };
+    storeRecentItems([duplicate, ...recent.items].slice(0, 10), "Design duplicated in local history.");
+  };
+
+  const deleteRecent = (id: string) =>
+    storeRecentItems(recent.items.filter((item) => item.id !== id), "Design removed from local history.");
+
   const clearRecent = () => {
     try {
       localStorage.removeItem("qrcraft-recents");
@@ -486,6 +606,73 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
     update({ ...initialDesign, values: { ...initialDesign.values } });
     setMobileTab("content");
     onNotify("Studio reset to the default design.");
+  };
+
+  const saveBrandKit = () => {
+    const kit: BrandKit = {
+      foreground: design.foreground,
+      background: design.background,
+      gradient: design.gradient,
+      gradientEnd: design.gradientEnd,
+      gradientAngle: design.gradientAngle,
+      dotStyle: design.dotStyle,
+      cornerStyle: design.cornerStyle,
+      cornerDotStyle: design.cornerDotStyle,
+      font: design.font,
+      logo: design.logo,
+      logoName: design.logoName,
+      logoBackground: design.logoBackground
+    };
+    try {
+      localStorage.setItem("qrcraft-brand-kit", JSON.stringify(kit));
+      setBrandKit(kit);
+      onNotify("Brand Kit saved on this device.");
+    } catch {
+      onNotify("Brand Kit could not be saved. Remove a large logo and try again.");
+    }
+  };
+
+  const applyBrandKit = () => {
+    if (!brandKit) return;
+    if (brandKit.logo && !isPro) {
+      onOpenPro();
+      update({ ...brandKit, logo: "", logoName: "", logoBackground: "none" });
+      onNotify("Brand colors and styles applied. Logo upload is available with Pro.");
+      return;
+    }
+    update({ ...brandKit });
+    onNotify("Brand Kit applied to the current QR design.");
+  };
+
+  const clearBrandKit = () => {
+    try {
+      localStorage.removeItem("qrcraft-brand-kit");
+      setBrandKit(null);
+      onNotify("Brand Kit removed from this device.");
+    } catch {
+      onNotify("Brand Kit could not be removed from browser storage.");
+    }
+  };
+
+  const exportPrintReady = async () => {
+    if (error || !data) {
+      onNotify(error || "Add QR content before exporting.");
+      return;
+    }
+    if (!isPro) {
+      onOpenPro();
+      return;
+    }
+    setExporting(true);
+    try {
+      const blob = await makePrintBlob(design, data, true, printPreset);
+      downloadBlob(blob, `qrcraft-${printPreset}.png`);
+      onNotify("Print-ready PNG downloaded.");
+    } catch (cause) {
+      onNotify(cause instanceof Error ? cause.message : "Print-ready export failed.");
+    } finally {
+      setExporting(false);
+    }
   };
 
   const loadBatchCsv = (event: ChangeEvent<HTMLInputElement>) => {
@@ -615,7 +802,27 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
         </div>
         <div className="control">
           {design.type === "website" && (
-            <Field label="Website URL" value={design.values.url ?? ""} onChange={(value) => updateValue("url", value)} placeholder="https://yourwebsite.com" />
+            <>
+              <Field label="Website URL" value={design.values.url ?? ""} onChange={(value) => updateValue("url", value)} placeholder="https://yourwebsite.com" />
+              <div className="utm-panel">
+                <button type="button" className="utm-toggle" aria-expanded={utmOpen} onClick={() => setUtmOpen((open) => !open)}>
+                  <span><Link2 size={13} /> Add UTM tracking</span><ChevronDown size={14} className={utmOpen ? "expanded" : ""} />
+                </button>
+                {utmOpen && <div className="utm-fields">
+                  <p>Optional campaign tags are added to the URL before encoding.</p>
+                  {[
+                    ["utm_source", "Source", "e.g. instagram"],
+                    ["utm_medium", "Medium", "e.g. social"],
+                    ["utm_campaign", "Campaign", "e.g. summer-menu"],
+                    ["utm_term", "Term", "optional keyword"],
+                    ["utm_content", "Content", "optional variant"]
+                  ].map(([key, label, placeholder]) => (
+                    <Field key={key} label={label} value={design.values[key] ?? ""} onChange={(value) => updateValue(key, value)} placeholder={placeholder} />
+                  ))}
+                  {data && !error && <div className="utm-result"><small>Final QR destination</small><code>{data}</code></div>}
+                </div>}
+              </div>
+            </>
           )}
           {design.type === "payment" && (
             <>
@@ -717,6 +924,21 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
             <div className="color-field"><input aria-label="Background color" type="color" value={design.background} onChange={(event) => update({ background: event.target.value })} /><span>{design.background.toUpperCase()}</span></div>
           </div>
         </div>
+        <div className={`scan-quality ${qualityWarnings.length ? "has-warnings" : ""}`} role="status" aria-live="polite">
+          {qualityWarnings.length ? <AlertTriangle size={15} /> : <Check size={15} />}
+          <div><b>{qualityWarnings.length ? "Scan-quality checks" : "Scan quality looks good"}</b>
+            {qualityWarnings.length ? <ul>{qualityWarnings.map((warning) => <li key={warning}>{warning}</li>)}</ul> : <p>Contrast, quiet zone, size, and logo coverage are within recommended limits.</p>}
+          </div>
+        </div>
+        <div className="brand-kit-panel">
+          <div className="brand-kit-heading"><div><h4>Brand Kit <span>saved locally</span></h4><p>Keep your colors, font, QR style, and logo ready for next time.</p></div><Paintbrush size={16} /></div>
+          <div className="brand-kit-actions">
+            <button type="button" className="btn btn-outline" onClick={saveBrandKit}><Save size={13} /> {brandKit ? "Update kit" : "Save current style"}</button>
+            {brandKit && <button type="button" className="btn btn-outline" onClick={applyBrandKit}><Check size={13} /> Apply</button>}
+            {brandKit && <button type="button" className="btn btn-ghost" onClick={clearBrandKit}>Clear</button>}
+          </div>
+          {brandKit?.logo && !isPro && <small className="helper">This kit includes a logo; the logo is only applied with Pro.</small>}
+        </div>
         <div className="control">
           <label className="toggle-row field-label">Use a color gradient <input className="switch" type="checkbox" checked={design.gradient} onChange={(event) => update({ gradient: event.target.checked })} /></label>
           {design.gradient && <div className="color-row gradient-colors">
@@ -749,6 +971,11 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
         <hr className="divider" />
         <h4 className="section-label"><Type size={14} /> A little prompt</h4>
         <Field label="Call-to-action label" value={design.cta} onChange={(value) => update({ cta: value })} placeholder="e.g. Scan to view our menu" />
+        <div className="cta-presets" aria-label="Suggested call-to-action labels">
+          {["Scan to view menu", "Scan to pay", "Scan to connect Wi-Fi", "Scan to follow us"].map((label) => (
+            <button key={label} type="button" className="btn btn-ghost" onClick={() => update({ cta: label })}>{label}</button>
+          ))}
+        </div>
         <div className="two-col control">
           <div><label className="field-label">Font</label><div className="select-wrap"><select className="field" value={design.font} onChange={(event) => update({ font: event.target.value })}><option>Inter</option><option>Arial</option><option>Georgia</option><option>Verdana</option><option>Courier New</option></select><ChevronDown size={13} /></div></div>
           <div><label className="field-label">Label color</label><div className="color-field"><input aria-label="CTA text color" type="color" value={design.ctaColor} onChange={(event) => update({ ctaColor: event.target.value })} /><span>{design.ctaColor.toUpperCase()}</span></div></div>
@@ -785,14 +1012,34 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
             <button className="btn btn-outline" disabled={Boolean(error)} onClick={saveRecent}><Save size={14} /> Save to recent designs</button>
             <button className="btn btn-outline" onClick={() => document.getElementById("design-json")?.click()}><FileJson size={14} /> Import design JSON</button>
           </div>
+          <div className="print-export-panel">
+            <div><h4>Print-ready sizes <span className="hint">Pro</span></h4><p>Export a balanced layout with your QR and call to action.</p></div>
+            <div className="print-export-controls">
+              <div className="select-wrap"><select className="field" aria-label="Print-ready export size" value={printPreset} onChange={(event) => setPrintPreset(event.target.value as PrintPreset)}>{printPresets.map((preset) => <option key={preset.value} value={preset.value}>{preset.label}</option>)}</select><ChevronDown size={13} /></div>
+              <button type="button" className={`btn ${isPro ? "btn-primary" : "btn-soft"}`} disabled={exporting} onClick={() => void exportPrintReady()}>{isPro ? <Download size={14} /> : <LockKeyhole size={13} />}{exporting ? "Preparing…" : isPro ? "Export print PNG" : "Unlock print exports"}</button>
+            </div>
+          </div>
           <div className="recent-header">
             <div><h4>Recent designs</h4><p>Saved only in this browser.</p></div>
             {recent.items.length > 0 && <button className="btn btn-ghost" onClick={clearRecent}>Clear</button>}
           </div>
           {!recent.ready ? <div className="recent-empty">Loading recent designs…</div> : recent.items.length > 0 ? <div className="recent-list">
-            {recent.items.map((item) => <button key={item.id} type="button" className="recent-item" onClick={() => loadRecent(item)}>
-              <span className="recent-icon"><QrCode size={16} /></span><span className="recent-copy"><b>{item.title.split(" · ")[0]}</b><small>{new Date(item.savedAt).toLocaleString()}</small></span><ChevronDown size={14} className="recent-arrow" />
-            </button>)}
+            {recent.items.map((item) => <div key={item.id} className="recent-item-row">
+              {renamingId === item.id ? <form className="recent-rename" onSubmit={(event) => { event.preventDefault(); saveRename(item.id); }}>
+                <input aria-label="Design name" className="field" autoFocus maxLength={70} value={renameValue} onChange={(event) => setRenameValue(event.target.value)} />
+                <button type="submit" className="btn btn-primary" aria-label="Save design name"><Check size={13} /></button>
+                <button type="button" className="btn btn-ghost" aria-label="Cancel rename" onClick={() => setRenamingId("")}><X size={13} /></button>
+              </form> : <>
+                <button type="button" className="recent-item" onClick={() => loadRecent(item)}>
+                  <span className="recent-icon"><QrCode size={16} /></span><span className="recent-copy"><b>{item.title.split(" · ")[0]}</b><small>{new Date(item.savedAt).toLocaleString()}</small></span><ChevronDown size={14} className="recent-arrow" />
+                </button>
+                <div className="recent-item-actions">
+                  <button type="button" className="btn btn-ghost" aria-label={`Rename ${item.title}`} title="Rename" onClick={() => { setRenamingId(item.id); setRenameValue(item.title.split(" · ")[0]); }}><Pencil size={13} /></button>
+                  <button type="button" className="btn btn-ghost" aria-label={`Duplicate ${item.title}`} title="Duplicate" onClick={() => duplicateRecent(item)}><Copy size={13} /></button>
+                  <button type="button" className="btn btn-ghost" aria-label={`Delete ${item.title}`} title="Delete" onClick={() => deleteRecent(item.id)}><Trash2 size={13} /></button>
+                </div>
+              </>}
+            </div>)}
           </div> : <div className="recent-empty">Saved designs will appear here when you choose “Save to recent designs”.</div>}
           {isPro && <div className="batch-panel">
             <label className="toggle-row field-label">Batch QR codes · Pro <button className="btn btn-ghost" onClick={() => setBatchOpen((value) => !value)}>{batchOpen ? "Close" : "Open"}</button></label>
@@ -808,10 +1055,27 @@ export default function QrStudio({ design, setDesign, isPro, onOpenPro, onNotify
 
       <aside className="panel preview-card" aria-label="Live QR preview">
         <div className="preview-head"><h3>Your live preview</h3><span className="live-pill"><span className="live-dot" /> LIVE</span></div>
+        <div className="preview-mode-selector" role="group" aria-label="Preview QR in a real-world setting">
+          {([
+            ["phone", "Phone", Smartphone],
+            ["table-tent", "Table tent", Store],
+            ["business-card", "Card", CreditCard],
+            ["poster", "Poster", QrCode],
+            ["product-label", "Label", Tag]
+          ] as const).map(([mode, label, Icon]) => (
+            <button type="button" key={mode} aria-pressed={previewMode === mode} className={previewMode === mode ? "active" : ""} onClick={() => setPreviewMode(mode)}>
+              <Icon size={13} />{label}
+            </button>
+          ))}
+        </div>
         <div className="qr-canvas-area">
-          {data && !error ? <div key="qr-preview" className={`qr-frame frame-${isPro ? design.frame : "none"}`}>
+          {data && !error ? <div key="qr-preview" className={`real-world-object object-${previewMode}`}>
+            <div className="real-world-label">{previewMode === "phone" ? "Phone screen" : previewMode === "table-tent" ? "Table tent" : previewMode === "business-card" ? "Business card" : previewMode === "poster" ? "Poster" : "Product label"}</div>
+            <div className={`qr-frame frame-${isPro ? design.frame : "none"}`}>
             <div ref={hostRef} className="qr-host" />
             {design.cta && <div className="cta-preview" style={{ color: isPro && design.frame === "violet" ? "#ffffff" : design.ctaColor, fontFamily: design.font }}>{design.cta}</div>}
+            </div>
+            {previewMode === "phone" && <div className="mock-phone-speaker" aria-hidden="true" />}
           </div> : <div key="qr-empty" className="empty-preview"><div className="empty-icon"><QrCode size={22} /></div><b>Your QR preview is waiting</b><br />Add your details on the left and your design will appear right here.</div>}
         </div>
         {error && <p className="field-error" role="alert">{error}</p>}

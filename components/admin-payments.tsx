@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock3, LogOut, LockKeyhole, RefreshCw, Search, X } from "lucide-react";
+import { Check, Clock3, LogOut, LockKeyhole, Mail, RefreshCw, Search, X } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -13,6 +13,7 @@ type Payment = {
   utr: string;
   submittedAt: number;
   status: PaymentStatus;
+  licenseEmailSentAt: number | null;
 };
 
 type Summary = {
@@ -149,18 +150,19 @@ export default function AdminPayments() {
     }
   };
 
-  const review = async (payment: Payment, status: "approved" | "rejected") => {
+  const review = async (payment: Payment, status: "approved" | "rejected", resendEmail = false) => {
     setWorking(payment.reference);
     setError("");
     try {
       const response = await fetch("/api/admin/upi-payments", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reference: payment.reference, status })
+        body: JSON.stringify({ reference: payment.reference, status, resendEmail })
       });
-      const body = await response.json() as { status?: PaymentStatus; error?: string };
+      const body = await response.json() as { status?: PaymentStatus; emailError?: string; error?: string };
       if (!response.ok) throw new Error(body.error || "This payment request could not be reviewed.");
       await loadPayments(true);
+      if (body.emailError) setError(body.emailError);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "This payment request could not be reviewed.");
     } finally {
@@ -174,7 +176,7 @@ export default function AdminPayments() {
       <header className="admin-heading">
         <span className="eyebrow"><LockKeyhole size={13} /> PRIVATE ADMIN</span>
         <h1>UPI payment reviews</h1>
-        <p>Verify each UTR in your bank app before approving. Approved payments receive a signed Pro code automatically.</p>
+        <p>Verify each UTR in your bank app before approving. The signed Pro code is emailed after approval when SMTP delivery is configured.</p>
       </header>
 
       {authLoading ? <section className="panel admin-panel"><p>Checking admin session…</p></section>
@@ -224,10 +226,14 @@ export default function AdminPayments() {
                     <div><dt>UPI transaction reference</dt><dd>{payment.utr}</dd></div>
                     <div><dt>Submitted</dt><dd>{new Date(payment.submittedAt).toLocaleString()}</dd></div>
                     <div><dt>Amount</dt><dd>₹9.00</dd></div>
+                    {payment.status === "approved" && <div><dt>License email</dt><dd>{payment.licenseEmailSentAt ? `Sent ${new Date(payment.licenseEmailSentAt).toLocaleString()}` : "Not sent"}</dd></div>}
                   </dl>
                   {payment.status === "pending" && <div className="admin-review-actions">
-                    <button type="button" className="btn btn-primary" disabled={Boolean(working)} onClick={() => void review(payment, "approved")}><Check size={14} />{working === payment.reference ? "Saving…" : "Verify & approve"}</button>
+                    <button type="button" className="btn btn-primary" disabled={Boolean(working)} onClick={() => void review(payment, "approved")}><Check size={14} />{working === payment.reference ? "Saving…" : "Verify & email license"}</button>
                     <button type="button" className="btn btn-outline" disabled={Boolean(working)} onClick={() => void review(payment, "rejected")}><X size={14} />Reject</button>
+                  </div>}
+                  {payment.status === "approved" && <div className="admin-review-actions">
+                    <button type="button" className="btn btn-outline" disabled={Boolean(working)} onClick={() => void review(payment, "approved", true)}><Mail size={14} />{working === payment.reference ? "Sending…" : "Resend license email"}</button>
                   </div>}
                 </article>
               ))}

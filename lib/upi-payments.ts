@@ -17,6 +17,7 @@ type StoredPayment = {
   status: PaymentStatus;
   access_key_hash: string;
   license_code: string | null;
+  license_email_sent_at: string | null;
   approved_at: string | null;
 };
 
@@ -155,6 +156,7 @@ export async function createPayment(input: { name: string; email: string; utr: s
         status: "pending",
         access_key_hash: createHash("sha256").update(accessKey).digest("hex"),
         license_code: null,
+        license_email_sent_at: null,
         approved_at: null
       })
     }
@@ -172,20 +174,21 @@ export async function getPaymentStatus(reference: string, accessKey: string) {
   return {
     reference: payment.reference,
     status: payment.status,
-    licenseCode: payment.status === "approved" ? payment.license_code ?? undefined : undefined
+    licenseCode: payment.status === "approved" ? payment.license_code ?? undefined : undefined,
+    licenseEmailSent: payment.status === "approved" && Boolean(payment.license_email_sent_at)
   };
 }
 
 export async function listPayments() {
   const query = new URLSearchParams({
-    select: "reference,name,email,utr,submitted_at,status",
+    select: "reference,name,email,utr,submitted_at,status,license_email_sent_at",
     name: "not.is.null",
     email: "not.is.null",
     utr: "not.is.null",
     order: "submitted_at.desc",
     limit: "100"
   });
-  const rows = await supabaseRequest<Pick<StoredPayment, "reference" | "name" | "email" | "utr" | "submitted_at" | "status">[]>(
+  const rows = await supabaseRequest<Pick<StoredPayment, "reference" | "name" | "email" | "utr" | "submitted_at" | "status" | "license_email_sent_at">[]>(
     `${PAYMENT_TABLE}?${query}`
   );
   return rows.flatMap((payment) => {
@@ -196,7 +199,8 @@ export async function listPayments() {
       email: payment.email,
       utr: payment.utr,
       submittedAt: Date.parse(payment.submitted_at),
-      status: payment.status
+      status: payment.status,
+      licenseEmailSentAt: payment.license_email_sent_at ? Date.parse(payment.license_email_sent_at) : null
     }];
   });
 }
@@ -234,6 +238,20 @@ export async function updatePaymentStatus(reference: string, status: "approved" 
     body: JSON.stringify(update)
   });
   return updated[0] ?? await getPayment(reference);
+}
+
+export async function markLicenseEmailSent(reference: string) {
+  const query = new URLSearchParams({
+    reference: `eq.${reference}`,
+    status: "eq.approved",
+    select: "reference"
+  });
+  const rows = await supabaseRequest<Pick<StoredPayment, "reference">[]>(`${PAYMENT_TABLE}?${query}`, {
+    method: "PATCH",
+    headers: { Prefer: "return=representation" },
+    body: JSON.stringify({ license_email_sent_at: new Date().toISOString() })
+  });
+  if (rows.length === 0) throw new Error("Email delivery status could not be saved.");
 }
 
 export async function isValidLicense(code: string) {

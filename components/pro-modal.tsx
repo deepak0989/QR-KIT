@@ -104,7 +104,7 @@ export default function ProModal({ onClose, onUnlock }: Props) {
           body: JSON.stringify({ reference: pending.reference, accessKey: pending.accessKey }),
           cache: "no-store"
         });
-        const body = await response.json() as { status?: PendingPayment["status"]; licenseCode?: string; error?: string };
+        const body = await response.json() as { status?: PendingPayment["status"]; licenseCode?: string; licenseEmailSent?: boolean; error?: string };
         if (!response.ok) throw new Error(body.error || "Order status could not be checked.");
         if (!active) return;
         if (body.status === "rejected") {
@@ -116,7 +116,9 @@ export default function ProModal({ onClose, onUnlock }: Props) {
           if (!unlocked) throw new Error("The approved Pro code could not be activated. Please contact support.");
           setApprovedCode(body.licenseCode);
           setPending({ ...pending, status: "approved" });
-          setPaymentMessage("Pro is active. Save this signed code somewhere safe so you can restore Pro on another browser.");
+          setPaymentMessage(body.licenseEmailSent
+            ? "Pro is active and your license was sent to your order email. Save this code to restore Pro on another browser."
+            : "Pro is active. Your license code is shown below, but email delivery is not confirmed. Contact support if it does not arrive.");
         }
       } catch (cause) {
         if (active) setPaymentMessage(cause instanceof Error ? cause.message : "Order status is temporarily unavailable.");
@@ -170,9 +172,9 @@ export default function ProModal({ onClose, onUnlock }: Props) {
       setPending(next);
       try {
         localStorage.setItem("qrcraft-upi-pending", JSON.stringify(next));
-        setPaymentMessage("Payment reference submitted. We'll review the UTR and update this order status.");
+        setPaymentMessage("Payment reference submitted. We'll verify your UTR manually and email your reusable Pro license to this address after approval.");
       } catch {
-        setPaymentMessage("Payment reference submitted, but this browser cannot save the order status. Keep this page open while we review it.");
+        setPaymentMessage("Payment reference submitted, but this browser cannot save the order status. Keep this page open while we review it; your license will be emailed after approval.");
       }
       setUtr("");
     } catch (cause) {
@@ -192,13 +194,15 @@ export default function ProModal({ onClose, onUnlock }: Props) {
         body: JSON.stringify({ reference: pending.reference, accessKey: pending.accessKey }),
         cache: "no-store"
       });
-      const body = await response.json() as { status?: PendingPayment["status"]; licenseCode?: string; error?: string };
+      const body = await response.json() as { status?: PendingPayment["status"]; licenseCode?: string; licenseEmailSent?: boolean; error?: string };
       if (!response.ok) throw new Error(body.error || "Order status could not be checked.");
       if (body.status === "approved" && body.licenseCode) {
         if (!(await onUnlock(body.licenseCode, false))) throw new Error("Approved code could not be activated. Contact support.");
         setApprovedCode(body.licenseCode);
         setPending({ ...pending, status: "approved" });
-        setPaymentMessage("Pro is active. Save this signed code somewhere safe so you can restore Pro on another browser.");
+        setPaymentMessage(body.licenseEmailSent
+          ? "Pro is active and your license was sent to your order email. Save this code to restore Pro on another browser."
+          : "Pro is active. Your license code is shown below, but email delivery is not confirmed. Contact support if it does not arrive.");
       } else if (body.status === "rejected") {
         setPending({ ...pending, status: "rejected" });
         setPaymentMessage("This payment request was declined. Contact support if needed.");

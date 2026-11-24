@@ -3,19 +3,28 @@
 import {
   ArrowDown,
   ArrowRight,
+  BriefcaseBusiness,
   Check,
   ChevronRight,
+  Contact,
   Download,
   Fingerprint,
+  FolderOpen,
+  Globe,
+  LayoutTemplate,
   Moon,
   QrCode,
   ShieldCheck,
+  ShoppingBag,
   Smartphone,
+  Star,
   Sparkles,
   Sun,
+  Wallet,
   WandSparkles,
   Zap
 } from "lucide-react";
+import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import ProModal from "@/components/pro-modal";
 import QrStudio from "@/components/qr-studio";
@@ -36,7 +45,8 @@ const templates: {
   { title: "WhatsApp", description: "Start a conversation instantly", type: "whatsapp", values: { phone: "15551234567", message: "Hi! I’d love to know more." }, colors: ["#128c65", "#60c49a"], background: "#f4fcf8", cta: "Chat with us on WhatsApp" },
   { title: "Payment", description: "Make paying quick and simple", type: "payment", values: { url: "https://buy.stripe.com/your-payment-link" }, colors: ["#3849a5", "#8796f4"], background: "#f5f6ff", cta: "Scan to pay" },
   { title: "Event details", description: "Share the details and directions", type: "website", values: { url: "https://yourevent.com/details" }, colors: ["#9a5836", "#efbd70"], background: "#fffaf2", cta: "Scan for event details" },
-  { title: "Business card", description: "Share contact info in a tap", type: "vcard", values: { name: "Your Name", company: "Your Company", title: "Your role", email: "hello@example.com", phone: "+1 555 123 4567" }, colors: ["#272b3f", "#7280a0"], background: "#f7f8fb", cta: "Save my contact" }
+  { title: "Business card", description: "Share contact info in a tap", type: "vcard", values: { name: "Your Name", company: "Your Company", title: "Your role", email: "hello@example.com", phone: "+1 555 123 4567" }, colors: ["#272b3f", "#7280a0"], background: "#f7f8fb", cta: "Save my contact" },
+  { title: "Google review", description: "Invite customers to share feedback", type: "website", values: { url: "https://g.page/r/your-review-link" }, colors: ["#3467d5", "#63a6f1"], background: "#f6f9ff", cta: "Scan to leave a review" }
 ];
 
 const features = [
@@ -60,6 +70,17 @@ const faqs = [
 function Logo() {
   return <a className="brand" href="#" aria-label="QRcraft home"><span className="brand-mark"><QrCode size={18} /></span>QRcraft</a>;
 }
+
+const businessToolCards = [
+  { title: "QR Code Studio", description: "Design, preview, and export a custom QR code.", href: "#studio", icon: QrCode },
+  { title: "Business Page", description: "Build a mobile-friendly one-page website.", href: "/tools/business-page", icon: Globe },
+  { title: "WhatsApp Catalog", description: "Show products and accept WhatsApp orders.", href: "/tools/catalog", icon: ShoppingBag },
+  { title: "Google Review QR", description: "Make reviews easy to find and leave.", href: "/tools/google-review", icon: Star },
+  { title: "UPI Payment QR", description: "Create a scan-to-pay QR for your business.", href: "/tools/upi-payment", icon: Wallet },
+  { title: "Digital Business Card", description: "Share your contact details and social links.", href: "/tools/business-card", icon: Contact },
+  { title: "Templates", description: "Start from a polished business or QR preset.", href: "/tools/templates", icon: LayoutTemplate },
+  { title: "My Designs", description: "Restore or manage designs saved on this device.", href: "/tools/designs", icon: FolderOpen }
+];
 
 export default function Home() {
   const [design, setDesign] = useState<Design>(initialDesign);
@@ -209,21 +230,47 @@ export default function Home() {
         <nav className="nav-actions" aria-label="Main navigation">
           <a className="nav-link" href="#studio">QR Studio</a>
           <a className="nav-link" href="#templates">Templates</a>
+          <Link className="nav-link" href="/tools">Business Tools</Link>
           <a className="nav-link" href="#pricing">Pricing</a>
+          <Link className="btn btn-soft nav-create-page" href="/tools/business-page" aria-label="Create Business Page"><BriefcaseBusiness size={14} /><span>Create Business Page</span></Link>
           <button className="btn btn-ghost theme-toggle" aria-label={`Switch to ${darkMode ? "light" : "dark"} mode`} onClick={() => setDarkMode((value) => !value)}>{darkMode ? <Sun size={17} /> : <Moon size={17} />}</button>
           {isPro ? <span className="top-pro-badge"><Check size={13} /> PRO UNLOCKED</span> : <button className="btn btn-primary" onClick={() => setProOpen(true)}><Sparkles size={14} /> Go Pro · ₹9</button>}
         </nav>
       </header>
 
       <section className="hero">
-        <span className="eyebrow"><Sparkles size={13} /> THE QR CODE DESIGN STUDIO</span>
-        <h1>Create beautiful QR codes in seconds</h1>
-        <p>Design custom, scannable QR codes for menus, Wi-Fi, links, payments, and events. No account required.</p>
-        <div className="hero-cta">
-          <a className="btn btn-primary" href="#studio">Create your QR code <ArrowRight size={15} /></a>
-          <a className="btn btn-outline" href="#templates">Explore templates <ChevronRight size={15} /></a>
+        <div className="hero-inner">
+          <div className="hero-copy">
+            <span className="eyebrow"><Sparkles size={13} /> THE QR CODE DESIGN STUDIO</span>
+            <h1>Create beautiful QR codes in seconds</h1>
+            <p>Design custom, scannable QR codes for menus, Wi-Fi, links, payments, and events. No account required.</p>
+            <div className="hero-cta">
+              <a className="btn btn-primary" href="#studio">Create your QR code <ArrowRight size={15} /></a>
+              <a className="btn btn-outline" href="#templates">Explore templates <ChevronRight size={15} /></a>
+            </div>
+            <div className="hero-foot"><span><Check size={13} /> Free to create</span><span><ShieldCheck size={13} /> Private by design</span><span><Zap size={13} /> Works in your browser</span></div>
+          </div>
+          <div className="hero-visual" aria-hidden="true">
+            <div className="hero-art-card">
+              <span className="hero-art-badge"><Sparkles size={12} /> Made for your brand</span>
+              <div className="hero-art-icon"><QrCode size={116} strokeWidth={1.15} /></div>
+              <div className="hero-art-caption"><span className="hero-art-check"><Check size={14} /></span><span><b>Ready to share</b><small>Designed in your browser</small></span><ArrowRight size={17} /></div>
+            </div>
+            <span className="hero-art-note">YOUR IDEA, ONE SCAN AWAY</span>
+          </div>
         </div>
-        <div className="hero-foot"><span><Check size={13} /> Free to create</span><span><ShieldCheck size={13} /> Private by design</span><span><Zap size={13} /> Works in your browser</span></div>
+      </section>
+
+      <section className="business-tools-home" id="business-tools">
+        <div className="business-tools-home-inner">
+          <div className="section-heading"><span className="eyebrow"><Sparkles size={13} /> YOUR BUSINESS TOOLKIT</span><h2>Everything your business needs to get noticed</h2><p>Create a page, help customers connect, and make every scan count.</p></div>
+          <div className="home-business-grid">
+            {businessToolCards.map(({ title, description, href, icon: Icon }) => <Link className="home-business-card" href={href} key={title}>
+              <span className="home-business-icon"><Icon size={18} /></span><b>{title}</b><small>{description}</small><ArrowRight size={14} className="home-business-arrow" />
+            </Link>)}
+          </div>
+          <Link href="/tools/business-page" className="btn btn-primary home-create-business"><BriefcaseBusiness size={15} />Create Business Page <ArrowRight size={14} /></Link>
+        </div>
       </section>
 
       <section className="studio-wrap" id="studio">
