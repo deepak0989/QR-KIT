@@ -16,7 +16,8 @@ export async function POST(request: Request) {
     if (!(await isValidLicense(code.trim())))
       return Response.json({ error: "This Pro code is invalid or its payment has not been approved." }, { status: 403 });
     return Response.json({ valid: true }, { headers: { "Cache-Control": "no-store" } });
-  } catch {
-    return Response.json({ error: "Pro license validation is temporarily unavailable." }, { status: 503 });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Pro license validation is temporarily unavailable.";
+    return Response.json({ error: message }, { status: 503 });
   }
 }
