@@ -50,7 +50,7 @@ const features = [
 
 const faqs = [
   ["Are these QR codes static?", "Yes. The QR code encodes your content directly. It does not depend on a QRcraft server or an account to keep working."],
-  ["Is my information private?", "QR generation, logo processing, design files, and exports happen locally in your browser. If you buy Pro, your name, email, and UPI transaction reference are stored in the configured Upstash review store for up to 90 days; QR content and uploaded logos are never sent."],
+  ["Is my information private?", "QR generation, logo processing, design files, and exports happen locally in your browser. If you buy Pro, your name, email, and UPI transaction reference are stored securely in Supabase for up to 90 days; QR content and uploaded logos are never sent."],
   ["Can I use a QR code for Wi-Fi?", "Yes. Choose Wi-Fi, enter the network name and password, and scan with a compatible phone camera to join."],
   ["Why does my logo increase error correction?", "A logo covers part of the code. We automatically use the strongest QR correction level to help phones recover the underlying data."],
   ["How do Pro unlocks work?", "Pay ₹9 using the UPI QR, submit your UTR, and wait for the QRcraft owner to match it in the bank app. After approval, your browser receives and validates a signed Pro license. UPI payment itself is reviewed manually."],
