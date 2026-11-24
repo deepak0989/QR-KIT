@@ -1,6 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const PAYMENT_TABLE = "qrcraft_upi_payments";
+const ADMIN_SESSION_COOKIE = "qrcraft_admin_session";
+const ADMIN_SESSION_SECONDS = 12 * 60 * 60;
 
 export type PaymentStatus = "pending" | "approved" | "rejected";
 
@@ -18,11 +20,27 @@ type StoredPayment = {
 };
 
 function supabaseConfig() {
-  const url = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "");
+  const configuredUrl = process.env.SUPABASE_URL?.trim();
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
-  if (!url || !serviceKey)
+  if (!configuredUrl || !serviceKey)
     throw new Error("Payment storage is not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY to the server environment.");
-  return { url, serviceKey };
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(configuredUrl);
+  } catch {
+    throw new Error("SUPABASE_URL must be your project's URL, for example https://your-project-ref.supabase.co.");
+  }
+  const localHttp = parsedUrl.protocol === "http:" &&
+    (parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1");
+  if ((!localHttp && parsedUrl.protocol !== "https:") ||
+      parsedUrl.pathname !== "/" || parsedUrl.search || parsedUrl.hash || parsedUrl.username || parsedUrl.password)
+    throw new Error("SUPABASE_URL must be the project URL (https://your-project-ref.supabase.co), without a REST path or API key.");
+  return { url: configuredUrl.replace(/\/+$/, ""), serviceKey };
+}
+
+function storageRequestError(status: number, code?: string) {
+  const details = code ? `, ${code}` : "";
+  return new Error(`Supabase request failed (HTTP ${status}${details}). Check the project URL, service-role key, and Supabase setup SQL.`);
 }
 
 async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -42,9 +60,30 @@ async function supabaseRequest<T>(path: string, init: RequestInit = {}): Promise
     const error = body && typeof body === "object" ? body as { code?: string } : {};
     if (response.status === 409 && error.code === "23505")
       throw new Error("That UPI reference was already submitted.");
-    throw new Error("Supabase payment storage request failed.");
+    throw storageRequestError(response.status, error.code);
   }
   return body as T;
+}
+
+async function countPayments(status?: PaymentStatus) {
+  const { url, serviceKey } = supabaseConfig();
+  const query = new URLSearchParams({ select: "reference" });
+  if (status) query.set("status", `eq.${status}`);
+  const response = await fetch(`${url}/rest/v1/${PAYMENT_TABLE}?${query}`, {
+    method: "HEAD",
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+      Prefer: "count=exact",
+      Range: "0-0"
+    },
+    cache: "no-store"
+  });
+  if (!response.ok) throw storageRequestError(response.status);
+  const count = response.headers.get("content-range")?.split("/")[1];
+  if (!count || count === "*" || !/^\d+$/.test(count))
+    throw new Error("Supabase did not return a valid payment count.");
+  return Number(count);
 }
 
 function licenseSecret() {
@@ -144,6 +183,16 @@ export async function listPayments() {
   });
 }
 
+export async function getPaymentSummary() {
+  const [total, pending, approved, rejected] = await Promise.all([
+    countPayments(),
+    countPayments("pending"),
+    countPayments("approved"),
+    countPayments("rejected")
+  ]);
+  return { total, pending, approved, rejected, revenueInr: approved * 9 };
+}
+
 export async function updatePaymentStatus(reference: string, status: "approved" | "rejected") {
   const payment = await getPayment(reference);
   if (!payment) return null;
@@ -171,9 +220,59 @@ export async function isValidLicense(code: string) {
   return equalText(licenseFor(match[1]), code);
 }
 
-export function isValidAdminToken(request: Request) {
-  const expected = process.env.PRO_ADMIN_TOKEN;
-  const supplied = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  if (!expected || Buffer.byteLength(expected, "utf8") < 32 || !supplied) return false;
-  return equalText(supplied, expected);
+export function isAdminLoginConfigured() {
+  const username = process.env.PRO_ADMIN_USERNAME;
+  const password = process.env.PRO_ADMIN_PASSWORD;
+  const secret = process.env.PRO_ADMIN_SESSION_SECRET;
+  return Boolean(username?.trim() && password && Buffer.byteLength(password, "utf8") >= 12 &&
+    secret && Buffer.byteLength(secret, "utf8") >= 32);
+}
+
+export function verifyAdminCredentials(username: string, password: string) {
+  const expectedUsername = process.env.PRO_ADMIN_USERNAME?.trim();
+  const expectedPassword = process.env.PRO_ADMIN_PASSWORD;
+  if (!isAdminLoginConfigured() || !expectedUsername || !expectedPassword) return false;
+  return equalText(username.trim(), expectedUsername) && equalText(password, expectedPassword);
+}
+
+function adminSessionSignature(payload: string) {
+  const secret = process.env.PRO_ADMIN_SESSION_SECRET;
+  if (!secret || Buffer.byteLength(secret, "utf8") < 32)
+    throw new Error("Admin session signing is not configured.");
+  return createHmac("sha256", secret).update(`qrcraft-admin-session-v1|${payload}`).digest("base64url");
+}
+
+export function createAdminSession() {
+  const issuedAt = Math.floor(Date.now() / 1000);
+  const payload = `${issuedAt}.${randomBytes(16).toString("base64url")}`;
+  return `${payload}.${adminSessionSignature(payload)}`;
+}
+
+export function adminSessionCookie(value: string, clear = false) {
+  const attributes = [
+    `${ADMIN_SESSION_COOKIE}=${clear ? "" : value}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Strict",
+    `Max-Age=${clear ? 0 : ADMIN_SESSION_SECONDS}`
+  ];
+  if (process.env.NODE_ENV === "production") attributes.push("Secure");
+  return attributes.join("; ");
+}
+
+export function isValidAdminSession(request: Request) {
+  if (!isAdminLoginConfigured()) return false;
+  const cookie = request.headers.get("cookie")
+    ?.split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${ADMIN_SESSION_COOKIE}=`))
+    ?.slice(ADMIN_SESSION_COOKIE.length + 1);
+  if (!cookie) return false;
+
+  const match = /^(\d{10})\.([A-Za-z0-9_-]{22})\.([A-Za-z0-9_-]{43})$/.exec(cookie);
+  if (!match) return false;
+  const issuedAt = Number(match[1]);
+  const now = Math.floor(Date.now() / 1000);
+  if (issuedAt > now + 60 || now - issuedAt > ADMIN_SESSION_SECONDS) return false;
+  return equalText(adminSessionSignature(`${match[1]}.${match[2]}`), match[3]);
 }
